@@ -49,10 +49,13 @@ model = addReaction(model, 'EX_Guanidine_D[e]', 'metaboliteList', {'M02035_c'},.
 model = addReaction(model, 'EX_pyrroline_D[e]', 'metaboliteList', {'pyr5c_c'},...
     'stoichCoeffList', [1]);
 
-model = changeObjective(model,{'EthyleneProd','DlactateProd'},[1,1]);
+ethylene_idx = find(strcmp(model.rxnNames, 'EX_Ethylene_D[e]'));
+lactate_idx = find(strcmp(model.rxnNames, 'EX_Dlactate_D[e]'));
+
+model = changeObjective(model,{'EX_Ethylene_D[e]', 'EX_Dlactate_D[e]'},[1, 1]);
 
 % Nandini's 7002 constraints code
-model = changeRxnBounds(model,'O2t' ,-15,'l');
+model = changeRxnBounds(model,'O2tex' ,-15,'l');
 model = changeRxnBounds(model,'EX_photon_e' ,-30,'b'); %-30 or -100 acceptable
 model = changeRxnBounds(model,'ATPM',1.3,'b');
 
@@ -87,12 +90,14 @@ model = changeRxnBounds(model, {'FUMtpp'}, 0, 'b');
 model = changeRxnBounds(model, {'FUMtex'}, 0, 'b');
 model = changeRxnBounds(model, {'LDH_D'}, 0, 'b');
 model = changeRxnBounds(model,'EX_ac_e',0,'b'); % acetate exchange reaction constrained to 0 for 2-D
+model = changeRxnBounds(model, 'EX_Ethylene_D[e]', 0, 'l'); % Nandini constraint from 7002 code
+model = changeRxnBounds(model, 'EX_Dlactate_D[e]', 0, 'l'); % Nandini constraint from 7002 code
 
 num_var = length(model.c);
 rng default
 
 options = optimoptions('ga','ConstraintTolerance',1e-4, 'UseParallel',true, 'UseVectorized', true,...
-                       'CrossoverFraction',0.85,'PopulationSize',500, 'StallGen', 12,'Generations',10000);
+                       'CrossoverFraction',0.85,'PopulationSize',300, 'StallGen', 12,'Generations',5000);
 
 x = 0; % Defining 'x' value that will be used to plot results (x-axis)
 for i = 0.1:0.1:1 % First 'for' loop will model 0 to 20 mmol gDw^{-1} hr^{-1} of flux. This can be changed to model different fluxes  
@@ -104,25 +109,19 @@ for i = 0.1:0.1:1 % First 'for' loop will model 0 to 20 mmol gDw^{-1} hr^{-1} of
     Aeq = (model.S);
     beq = (model.b)';
     func = @(v) -objective_infile(v, c);
+
     tic;
     % Call Genetic Algorithm
     [FBAsolution, fval]  = ga(func,num_var,[],[],Aeq,beq,[],[],[], options);
     toc;
-    lactate(x)=FBAsolution(323);
+
     objective(x)= -fval;
 
     CO2(x)= i; % CO2 is a function of 'x' and will model the i values
-    ethylene(x)=FBAsolution(864);
-    dlactate(x)=FBAsolution(866);
+    ethylene(x)=FBAsolution(ethylene_idx);
+    dlactate(x)=FBAsolution(lactate_idx);
 end
 
-%subplot(2,2,1)
-%surf(CO2,Acetate,biomass) % 2-D modeling biomass growth per CO2 and acetate injection
-%title ('Mixotrophic Biomass Production')
-%xlabel('CO2 uptake rate)','fontweight','bold','fontsize',11)
-%ylabel('Acetate uptake rate)','fontweight','bold','fontsize',11)
-%zlabel('Biomass production)','fontweight','bold','fontsize',11)
-%axis tight;
 
 subplot(2,2,1)
 plot(CO2,ethylene) % 2-D modeling biomass growth per CO2 and acetate injection
@@ -146,8 +145,10 @@ ylabel('Objective function','fontweight','bold','fontsize',11)
 axis tight;
 
 
-saveas(gcf, 'out/output_plot.fig');
-saveas(gcf, 'out/output_plot.png');
+saveas(gcf, 'out/output_plot_nandini2.fig');
+saveas(gcf, 'out/output_plot_nandini2.png');
+
+disp(FBAsolution);
 
 save('output/simple4/CO2.mat', 'CO2')
 save('output/simple4/Acetate.mat', 'Acetate')
